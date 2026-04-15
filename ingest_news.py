@@ -1,39 +1,51 @@
 import feedparser
 import requests
+import schedule
+import time
 
-API_URL = "http://127.0.0.1:8000/analyze"
+PROJECT_ID = "politik"
+API_URL = f"http://127.0.0.1:8000/projects/{PROJECT_ID}/analyze"
 
-# Google News RSS (Indonesia politics)
 RSS_URL = "https://news.google.com/rss/search?q=politik+Indonesia&hl=id&gl=ID&ceid=ID:id"
+
+seen_titles = set()
+
 
 def fetch_news():
     feed = feedparser.parse(RSS_URL)
 
-    for entry in feed.entries[:10]:  # limit 10 news
+    for entry in feed.entries[:10]:
         text = entry.title
 
-        print(f"Sending: {text}")
+        if text in seen_titles:
+            continue
 
-        response = requests.post(API_URL, json={"text": text})
+        seen_titles.add(text)
 
-        if response.status_code == 200:
-            print("Saved:", response.json())
-        else:
-            print("Error:", response.status_code)
+        print(f"[INGEST] Sending: {text}")
 
-import schedule
-import time
+        try:
+            response = requests.post(API_URL, json={"text": text})
+
+            if response.status_code == 200:
+                data = response.json()
+                print(f"[SUCCESS] Sentiment: {data.get('sentiment')}")
+            else:
+                print(f"[ERROR] Status: {response.status_code}")
+
+        except Exception as e:
+            print(f"[EXCEPTION] {e}")
+
 
 def job():
-    print("Running scheduled news ingestion...")
+    print("\n[JOB] Running scheduled news ingestion...")
     fetch_news()
 
-# Run every 10 minutes (you can change this)
+
 schedule.every(10).minutes.do(job)
 
-print("Scheduler started...")
+print("[SYSTEM] Scheduler started...")
 
 while True:
     schedule.run_pending()
     time.sleep(1)
-    

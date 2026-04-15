@@ -10,13 +10,16 @@ class SentimentRecord(Base):
     confidence = Column(Float)
     timestamp = Column(String)
 
+    project_id = Column(String, index=True)
 
-# 👇 ADD THIS
+
 class EntityRecord(Base):
     __tablename__ = "entities"
 
     id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)          # entity name
-    label = Column(String)         # PER, ORG, etc.
-    sentiment = Column(String)     # link sentiment
-    source_text = Column(String)   # original sentence
+    text = Column(String)
+    label = Column(String)
+    sentiment = Column(String)
+    source_text = Column(String)
+
+    project_id = Column(String, index=True)

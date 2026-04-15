@@ -1,16 +1,7 @@
+from services.sentiment_service import sentiment_service
 from models import EntityRecord
-import spacy 
-nlp = None
-
-def load_nlp():
-    global nlp
-    if nlp is None:
-        print("Loading NLP model...")
-        nlp = spacy.load("xx_ent_wiki_sm")
-
 from fastapi import FastAPI
 from pydantic import BaseModel
-from transformers import pipeline
 from database import SessionLocal
 from models import SentimentRecord
 from datetime import datetime
@@ -22,12 +13,6 @@ from models import Base
 
 Base.metadata.create_all(bind=engine)
 
-# Load sentiment model
-classifier = pipeline(
-    "sentiment-analysis",
-    model="nlptown/bert-base-multilingual-uncased-sentiment"
-)
-
 class TextInput(BaseModel):
     text: str
 
@@ -35,40 +20,20 @@ class TextInput(BaseModel):
 def home():
     return {"message": "Sentiment API is running"}
 
-def convert_sentiment(label):
-    
-    stars = int(label[0])  # "1 star" → 1
-
-    if stars <= 2:
-        return "negative"
-    elif stars == 3:
-        return "neutral"
-    else:
-        return "positive"
-    
-def extract_entities(text):
-    load_nlp()  # 👈 important
-
-    doc = nlp(text)
-    entities = []
-
-    for ent in doc.ents:
-        entities.append({
-            "text": ent.text,
-            "label": ent.label_
-        })
-
-    return entities
-
 @app.post("/analyze")
 def analyze(input: TextInput):
-    result = classifier(input.text)[0]
-    sentiment = convert_sentiment(result["label"])
-    entities = extract_entities(input.text)
+
+    analysis = sentiment_service.analyze(input.text)
+
+    sentiment = analysis["sentiment"]
+    confidence = analysis["confidence"]
+    entities = analysis["entities"]
+
     db = SessionLocal()
 
-    # 🔴 CHECK DUPLICATE
-    existing = db.query(SentimentRecord).filter(SentimentRecord.text == input.text).first()
+    existing = db.query(SentimentRecord).filter(
+        SentimentRecord.text == input.text
+    ).first()
 
     if existing:
         db.close()
@@ -77,31 +42,32 @@ def analyze(input: TextInput):
             "text": input.text
         }
 
-    # ✅ INSERT IF NEW
     record = SentimentRecord(
         text=input.text,
         sentiment=sentiment,
-        confidence=result["score"],
+        confidence=confidence,
         timestamp=str(datetime.now())
     )
+
     db.add(record)
-    # 🔹 Save entities
+
     for ent in entities:
         entity_record = EntityRecord(
-        text=ent["text"],
-        label=ent["label"],
-        sentiment=sentiment,
-        source_text=input.text
-    )
-    db.add(entity_record)
+            text=ent["text"],
+            label=ent["label"],
+            sentiment=sentiment,
+            source_text=input.text
+        )
+        db.add(entity_record)
+
     db.commit()
     db.close()
 
     return {
-    "text": input.text,
-    "sentiment": sentiment,
-    "confidence": result["score"],
-    "entities": entities
+        "text": input.text,
+        "sentiment": sentiment,
+        "confidence": confidence,
+        "entities": entities
     }
 
 @app.get("/data")

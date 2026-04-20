@@ -42,7 +42,7 @@ def job():
     fetch_news()
 
 
-schedule.every(10).minutes.do(job)
+schedule.every(1).minutes.do(job)
 
 print("[SYSTEM] Scheduler started...")
 

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from database import SessionLocal
 from models import SentimentRecord
 from datetime import datetime
+import feedparser
 
 app = FastAPI()
 
@@ -237,3 +238,70 @@ def get_top_entities(project_id: str, limit: int = 10):
     result = sorted(result, key=lambda x: x["total"], reverse=True)
 
     return result[:limit]
+
+@app.get("/search")
+def search(query: str, project_id: str = "realtime", save: bool = False):
+    url = f"https://news.google.com/rss/search?q={query}&hl=id&gl=ID&ceid=ID:id"
+
+    feed = feedparser.parse(url)
+
+    results = []
+
+    summary = {
+        "positive": 0,
+        "neutral": 0,
+        "negative": 0
+}
+
+    db = SessionLocal()
+
+    for entry in feed.entries[:5]:
+        text = entry.title
+
+        # 🔥 Use your service (VERY IMPORTANT)
+        analysis = sentiment_service.analyze(text)
+        sentiment = analysis["sentiment"]
+        if sentiment in summary:
+            summary[sentiment] += 1
+
+        data = {
+            "text": text,
+            "sentiment": analysis["sentiment"],
+            "confidence": analysis["confidence"],
+            "entities": analysis["entities"]
+        }
+
+        results.append(data)
+
+        # ✅ OPTIONAL SAVE
+        if save:
+            record = SentimentRecord(
+                text=text,
+                sentiment=analysis["sentiment"],
+                confidence=analysis["confidence"],
+                timestamp=str(datetime.now()),
+                project_id=project_id
+            )
+            db.add(record)
+
+            for ent in analysis["entities"]:
+                entity_record = EntityRecord(
+                    text=ent["text"],
+                    label=ent["label"],
+                    sentiment=analysis["sentiment"],
+                    source_text=text,
+                    project_id=project_id
+                )
+                db.add(entity_record)
+
+    if save:
+        db.commit()
+
+    db.close()
+
+    return {
+    "query": query,
+    "total": len(results),
+    "sentiment_summary": summary,  # 🔥 NEW
+    "data": results
+}

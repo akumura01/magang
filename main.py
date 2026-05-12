@@ -1,6 +1,7 @@
 from services.sentiment_service import sentiment_service
 from models import EntityRecord
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from database import SessionLocal
 from models import SentimentRecord
@@ -8,6 +9,15 @@ from datetime import datetime
 import feedparser
 
 app = FastAPI()
+
+# Enable CORS so the frontend (served from another origin) can call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 from database import engine
 from models import Base

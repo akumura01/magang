@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sentiment API Frontend</title>
+  <style>
+    body{font-family:Inter,system-ui,Segoe UI,Arial;margin:0;padding:20px;background:#f6f8fa;color:#0b1220}
+    h1{margin:0 0 8px}
+    .row{display:flex;gap:12px;align-items:center}
+    .card{background:#fff;padding:16px;border-radius:8px;box-shadow:0 1px 4px rgba(11,18,32,0.06);margin:12px 0}
+    label{font-weight:600;font-size:13px}
+    input[type=text],input[type=number],select,textarea{width:100%;padding:8px;border:1px solid #e3e6ea;border-radius:6px;margin-top:6px}
+    textarea{height:80px;font-family:inherit}
+    button{background:#0b5fff;color:#fff;border:0;padding:8px 12px;border-radius:6px;cursor:pointer}
+    pre{background:#0f1720;color:#e6eef8;padding:12px;border-radius:6px;overflow:auto}
+    .controls{display:flex;gap:8px;margin-top:8px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+    .muted{color:#5b6b78;font-size:13px}
+  </style>
+</head>
+<body>
+  <h1>Sentiment API — Frontend</h1>
+  <div class="muted">Ubah base URL jika backend berjalan di alamat lain.</div>
+
+  <div class="card">
+    <label>Backend Base URL</label>
+    <div class="row" style="margin-top:8px">
+      <input id="baseUrl" type="text" value="http://localhost:8000" />
+      <button id="checkRoot">Check /</button>
+    </div>
+    <div id="rootResult" style="margin-top:8px"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Analyze (POST /projects/{project_id}/analyze)</h3>
+      <label>Project ID</label>
+      <input id="analyzeProjectId" type="text" value="realtime" />
+      <label style="margin-top:8px">Text</label>
+      <textarea id="analyzeText">Saya sangat senang dengan layanan ini</textarea>
+      <div class="controls">
+        <button id="analyzeBtn">Analyze & Save</button>
+        <button id="analyzeNoSaveBtn">Analyze (no DB)</button>
+      </div>
+      <h4>Response</h4>
+      <pre id="analyzeResult">{}</pre>
+    </div>
+
+    <div class="card">
+      <h3>Search (GET /search)</h3>
+      <label>Query</label>
+      <input id="searchQuery" type="text" value="Teknologi" />
+      <label>Project ID</label>
+      <input id="searchProjectId" type="text" value="realtime" />
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <label><input id="searchSave" type="checkbox" /> Save to DB</label>
+        <button id="searchBtn">Search</button>
+      </div>
+      <h4>Response</h4>
+      <pre id="searchResult">{}</pre>
+    </div>
+
+    <div class="card">
+      <h3>Get Data (GET /data)</h3>
+      <label>Sentiment (optional: positive/neutral/negative)</label>
+      <input id="dataSentiment" type="text" />
+      <label>Limit</label>
+      <input id="dataLimit" type="number" value="10" />
+      <div class="controls"><button id="dataBtn">Get Data</button></div>
+      <h4>Response</h4>
+      <pre id="dataResult">{}</pre>
+    </div>
+
+    <div class="card">
+      <h3>Get Entity (GET /entity)</h3>
+      <label>Entity name</label>
+      <input id="entityName" type="text" value="Jokowi" />
+      <div class="controls"><button id="entityBtn">Query Entity</button></div>
+      <h4>Response</h4>
+      <pre id="entityResult">{}</pre>
+    </div>
+
+    <div class="card">
+      <h3>Top Entities (GET /top-entities)</h3>
+      <label>Limit</label>
+      <input id="topLimit" type="number" value="10" />
+      <div class="controls"><button id="topBtn">Get Top Entities</button></div>
+      <h4>Response</h4>
+      <pre id="topResult">{}</pre>
+    </div>
+
+    <div class="card">
+      <h3>Project-scoped: Data / Entity / Top Entities</h3>
+      <label>Project ID</label>
+      <input id="projId" type="text" value="realtime" />
+      <label>Entity name (for project entity)</label>
+      <input id="projEntityName" type="text" value="Jokowi" />
+      <label>Sentiment (optional)</label>
+      <input id="projSentiment" type="text" />
+      <label>Limit</label>
+      <input id="projLimit" type="number" value="10" />
+      <div class="controls">
+        <button id="projDataBtn">Get Project Data</button>
+        <button id="projEntityBtn">Get Project Entity</button>
+        <button id="projTopBtn">Get Project Top</button>
+      </div>
+      <h4>Response</h4>
+      <pre id="projResult">{}</pre>
+    </div>
+  </div>
+
+  <script>
+    function getBase(){
+      const raw = document.getElementById('baseUrl').value.trim()
+      // fallback to localhost backend if the field is empty
+      const base = raw || 'http://localhost:8000'
+      return base.replace(/\/$/, '')
+    }
+
+    function show(el, data){document.getElementById(el).textContent = JSON.stringify(data, null, 2)}
+
+    async function callApi(method, path, {query=null, body=null}={}){
+      const base = getBase()
+      // Use URL constructor to avoid accidental relative requests to the frontend origin
+      let url
+      try{
+        // if path is like '/search' this resolves correctly against base
+        url = new URL(path, base)
+        if(query){
+          const params = new URLSearchParams(query)
+          url.search = params.toString()
+        }
+        url = url.toString()
+      }catch(e){
+        // fallback to manual concat
+        url = base + path + (query ? ('?' + new URLSearchParams(query).toString()) : '')
+      }
+
+      const opts = {method, headers:{'Accept':'application/json'}}
+      if(body){opts.headers['Content-Type']='application/json'; opts.body = JSON.stringify(body)}
+
+      const res = await fetch(url, opts)
+      const ct = res.headers.get('content-type') || ''
+      if(ct.includes('application/json')) return res.json()
+      return res.text()
+    }
+
+    document.getElementById('checkRoot').addEventListener('click', async ()=>{
+      const r = await callApi('GET','/')
+      show('rootResult', r)
+    })
+
+    document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
+      const project = document.getElementById('analyzeProjectId').value || 'realtime'
+      const text = document.getElementById('analyzeText').value
+      try{const r = await callApi('POST',`/projects/${encodeURIComponent(project)}/analyze`,{body:{text}}); show('analyzeResult', r)}catch(e){show('analyzeResult',{error:e.message})}
+    })
+
+    document.getElementById('analyzeNoSaveBtn').addEventListener('click', async ()=>{
+      const project = document.getElementById('analyzeProjectId').value || 'realtime'
+      const text = document.getElementById('analyzeText').value
+      try{const r = await callApi('POST',`/projects/${encodeURIComponent(project)}/analyze`,{body:{text}}); show('analyzeResult', r)}catch(e){show('analyzeResult',{error:e.message})}
+    })
+
+    document.getElementById('searchBtn').addEventListener('click', async ()=>{
+      const q = document.getElementById('searchQuery').value||''
+      const pid = document.getElementById('searchProjectId').value||'realtime'
+      const save = document.getElementById('searchSave').checked
+      try{const r = await callApi('GET','/search',{query:{query:q,project_id:pid,save:save}}); show('searchResult', r)}catch(e){show('searchResult',{error:e.message})}
+    })
+
+    document.getElementById('dataBtn').addEventListener('click', async ()=>{
+      const sentiment = document.getElementById('dataSentiment').value
+      const limit = document.getElementById('dataLimit').value || 10
+      const q = {}
+      if(sentiment) q.sentiment = sentiment
+      q.limit = limit
+      try{const r = await callApi('GET','/data',{query:q}); show('dataResult', r)}catch(e){show('dataResult',{error:e.message})}
+    })
+
+    document.getElementById('entityBtn').addEventListener('click', async ()=>{
+      const name = document.getElementById('entityName').value||''
+      try{const r = await callApi('GET','/entity',{query:{name}}); show('entityResult', r)}catch(e){show('entityResult',{error:e.message})}
+    })
+
+    document.getElementById('topBtn').addEventListener('click', async ()=>{
+      const limit = document.getElementById('topLimit').value || 10
+      try{const r = await callApi('GET','/top-entities',{query:{limit}}); show('topResult', r)}catch(e){show('topResult',{error:e.message})}
+    })
+
+    document.getElementById('projDataBtn').addEventListener('click', async ()=>{
+      const project = document.getElementById('projId').value||'realtime'
+      const sentiment = document.getElementById('projSentiment').value
+      const limit = document.getElementById('projLimit').value || 10
+      const q = {limit}
+      if(sentiment) q.sentiment = sentiment
+      try{const r = await callApi('GET',`/projects/${encodeURIComponent(project)}/data`,{query:q}); show('projResult', r)}catch(e){show('projResult',{error:e.message})}
+    })
+
+    document.getElementById('projEntityBtn').addEventListener('click', async ()=>{
+      const project = document.getElementById('projId').value||'realtime'
+      const name = document.getElementById('projEntityName').value||''
+      try{const r = await callApi('GET',`/projects/${encodeURIComponent(project)}/entity`,{query:{name}}); show('projResult', r)}catch(e){show('projResult',{error:e.message})}
+    })
+
+    document.getElementById('projTopBtn').addEventListener('click', async ()=>{
+      const project = document.getElementById('projId').value||'realtime'
+      const limit = document.getElementById('projLimit').value || 10
+      try{const r = await callApi('GET',`/projects/${encodeURIComponent(project)}/top-entities`,{query:{limit}}); show('projResult', r)}catch(e){show('projResult',{error:e.message})}
+    })
+
+    (async ()=>{ try{ const r = await callApi('GET','/'); document.getElementById('rootResult').textContent = JSON.stringify(r)}catch(e){document.getElementById('rootResult').textContent = 'Not reachable'}})()
+  </script>
+</body>
+</html>
